@@ -56,3 +56,16 @@ def test_decision_memory_lifecycle(client, auth_headers):
     res_outcome = client.post(f"/api/v1/decisions/{dec_id}/outcome", headers=auth_headers, json=outcome_payload)
     assert res_outcome.status_code == 201
     assert res_outcome.json()["verdict"] == "met"
+
+
+def test_production_health_check_endpoints(client):
+    """Verify both /health and /api/v1/health probe active database connectivity."""
+    for path in ["/health", "/api/v1/health"]:
+        res = client.get(path)
+        assert res.status_code == 200
+        data = res.json()
+        assert data["status"] == "healthy"
+        assert data["database"] == "connected"
+        assert "version" in data
+        assert "platform" in data
+

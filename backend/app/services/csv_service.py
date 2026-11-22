@@ -87,6 +87,16 @@ def parse_amount(val_str: Any) -> Tuple[float, Optional[str]]:
         return 0.0, None
 
 
+def sanitize_csv_field(val: Any) -> str:
+    """Sanitize CSV text fields against formula/DDE injection (OWASP CSV Injection)."""
+    if not val:
+        return ""
+    s = str(val).strip()
+    if s and s[0] in ("=", "@", "\t", "\r"):
+        s = "'" + s
+    return s
+
+
 def parse_date_robust(val_str: Any) -> Optional[date]:
     """Step 5: Robust date parsing supporting various international formats."""
     if not val_str:
@@ -240,10 +250,10 @@ def process_csv_file(
         elif inferred_type:
             final_type = inferred_type
 
-        # Step 9: Normalization
-        clean_desc = raw_desc.strip() or "Transaction"
-        clean_party = raw_party.strip() or clean_desc
-        clean_cat = raw_cat.strip() or "General"
+        # Step 9: Normalization & CSV Injection defense
+        clean_desc = sanitize_csv_field(raw_desc) or "Transaction"
+        clean_party = sanitize_csv_field(raw_party) or clean_desc
+        clean_cat = sanitize_csv_field(raw_cat) or "General"
         detected_cats_map[clean_cat] = detected_cats_map.get(clean_cat, 0) + 1
 
         # Step 8: Duplicate detection via fingerprint

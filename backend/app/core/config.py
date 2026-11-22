@@ -12,6 +12,7 @@ class Settings:
     PROJECT_NAME: str = "ArthaFlow AI"
     VERSION: str = "1.0.0"
     API_V1_STR: str = "/api/v1"
+    ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
     
     # Security
     SECRET_KEY: str = os.getenv("SECRET_KEY", "arthaflow-super-secret-key-development-2026-secure")
@@ -28,14 +29,22 @@ class Settings:
     # AI / Gemini
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
     
-    # CORS
-    CORS_ORIGINS: list[str] = [
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:3000",
-        "*"
-    ]
+    # CORS Configuration
+    raw_cors = os.getenv("CORS_ORIGINS", "")
+    if raw_cors:
+        CORS_ORIGINS: list[str] = [origin.strip() for origin in raw_cors.split(",") if origin.strip()]
+    elif ENVIRONMENT == "production":
+        CORS_ORIGINS: list[str] = [
+            "https://arthaflow.vercel.app",
+            "https://arthaflow-ai.vercel.app",
+        ]
+    else:
+        CORS_ORIGINS: list[str] = [
+            "http://localhost:3000",
+            "http://localhost:5173",
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:5173",
+        ]
     
     # Limits
     MAX_CSV_UPLOAD_BYTES: int = 10 * 1024 * 1024  # 10MB

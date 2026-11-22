@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
@@ -12,12 +13,14 @@ router = APIRouter(prefix="/forecasts", tags=["Forecasting"])
 
 @router.get("", response_model=ForecastResponse)
 def get_forecast(
-    days: int = Query(30, ge=7, le=90),
+    days: Optional[int] = Query(None, ge=7, le=90),
+    horizon_days: Optional[int] = Query(None, ge=7, le=90),
     workspace: Workspace = Depends(get_current_workspace),
     db: Session = Depends(get_db),
 ):
     """Retrieve 7-day or 30-day deterministic cash-flow forecast."""
-    fc_data = generate_cash_forecast(db, workspace, horizon_days=days)
+    effective_days = horizon_days or days or 30
+    fc_data = generate_cash_forecast(db, workspace, horizon_days=effective_days)
     return ForecastResponse(**fc_data)
 
 

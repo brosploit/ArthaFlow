@@ -1,6 +1,6 @@
-from typing import List, Optional, Dict, Any
-from datetime import datetime
-from pydantic import BaseModel, Field
+from typing import List, Optional, Dict, Any, Union
+from datetime import datetime, date
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class SimulationRequest(BaseModel):
@@ -18,6 +18,8 @@ class SimulationTrajectoryPoint(BaseModel):
 
 
 class SimulationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     workspace_id: str
     title: str
@@ -30,7 +32,7 @@ class SimulationResponse(BaseModel):
     simulated_ending_cash: float
     net_impact: float
     lowest_cash_dip: float
-    lowest_cash_date: str
+    lowest_cash_date: Union[date, str]
     break_even_day: Optional[float]
     verdict: str  # SAFE, CAUTION, HIGH_RISK
     risk_level: str
@@ -38,6 +40,3 @@ class SimulationResponse(BaseModel):
     rule_based_advice: List[str]
     trajectory_data: List[SimulationTrajectoryPoint]
     created_at: datetime
-
-    class Config:
-        from_attributes = True

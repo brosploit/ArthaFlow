@@ -1,0 +1,8 @@
+InvoiceNumber,EntityName,Type,Amount,IssueDate,DueDate,ExpectedPaymentDate,Status,Category,Notes
+INV-2024-041,FabIndia Franchise Outlet,receivable,35000.00,2026-10-15,2026-11-15,2026-11-25,pending,Wholesale,Confirmed NEFT release scheduled for Nov 25
+INV-2024-042,Kala Kendra Fashion House,receivable,28500.00,2026-10-01,2026-10-31,2026-11-12,overdue,Wholesale,Critical Concentration Alert: 12 days overdue (accounts for 34% of pending receivables)
+INV-2024-043,Roopam Heritage Silks,receivable,19000.00,2026-11-05,2026-12-05,2026-12-02,pending,Corporate Sales,Normal credit terms within 30 days
+VEND-SCM-4591,Surat Cotton Mills,payable,38000.00,2026-10-28,2026-11-28,2026-11-28,pending,Raw Material,Net 30 raw fabric tranche payment
+VEND-SRE-1105,Sharma Real Estate Trust,payable,22000.00,2026-11-01,2026-12-05,2026-12-05,pending,Rent & Facilities,December Showroom Lease Rent
+VEND-STAFF-1206,Staff Salary Payroll Account,payable,45000.00,2026-11-25,2026-12-06,2026-12-06,pending,Payroll,Monthly employee wages and store staff stipend
+VEND-DLV-9012,Delhivery Surface Logistics,payable,8400.00,2026-11-10,2026-12-01,2026-12-01,pending,Logistics,E-commerce delivery fees

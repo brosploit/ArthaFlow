@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class WorkspaceCreate(BaseModel):
@@ -11,17 +11,18 @@ class WorkspaceCreate(BaseModel):
 
 
 class WorkspaceMemberResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     workspace_id: str
     user_id: str
     role: str
     created_at: datetime
 
-    class Config:
-        from_attributes = True
-
 
 class WorkspaceResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     name: str
     mode: str
@@ -30,6 +31,3 @@ class WorkspaceResponse(BaseModel):
     owner_id: str
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True

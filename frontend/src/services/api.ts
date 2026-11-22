@@ -28,9 +28,44 @@ import {
   DEMO_CHAT_MESSAGES,
 } from "./demoData";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "/api/v1";
+const rawApiUrl = (import.meta.env.VITE_API_URL || "").trim();
+const API_BASE_URL = rawApiUrl
+  ? rawApiUrl.endsWith("/api/v1")
+    ? rawApiUrl
+    : `${rawApiUrl.replace(/\/+$/, "")}/api/v1`
+  : "/api/v1";
 
-// Helper to determine if we should fall back to local reactive demo store
+// Token and workspace management helpers
+export const authStorage = {
+  getToken(): string | null {
+    return localStorage.getItem("arthaflow_token");
+  },
+  setToken(token: string) {
+    localStorage.setItem("arthaflow_token", token);
+  },
+  clearToken() {
+    localStorage.removeItem("arthaflow_token");
+    localStorage.removeItem("arthaflow_user");
+  },
+  getUser(): Record<string, unknown> | null {
+    try {
+      const u = localStorage.getItem("arthaflow_user");
+      return u ? JSON.parse(u) : null;
+    } catch {
+      return null;
+    }
+  },
+  setUser(user: Record<string, unknown>) {
+    localStorage.setItem("arthaflow_user", JSON.stringify(user));
+  },
+  getActiveWorkspaceId(): string {
+    return localStorage.getItem("arthaflow_active_ws_id") || "";
+  },
+  setActiveWorkspaceId(id: string) {
+    localStorage.setItem("arthaflow_active_ws_id", id);
+  },
+};
+
 function getStoredItem<T>(key: string, defaultVal: T): T {
   try {
     const item = localStorage.getItem(`arthaflow_${key}`);
@@ -44,18 +79,109 @@ function setStoredItem<T>(key: string, val: T): void {
   try {
     localStorage.setItem(`arthaflow_${key}`, JSON.stringify(val));
   } catch {
-    // Ignore storage quota
+    // Ignore storage quota limits
   }
 }
 
+async function request<T>(
+  endpoint: string,
+  options: RequestInit = {},
+  workspaceId?: string
+): Promise<T> {
+  const token = authStorage.getToken();
+  const wsId = workspaceId || authStorage.getActiveWorkspaceId();
+
+  const headers = new Headers(options.headers || {});
+  if (token && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+  if (wsId && !headers.has("X-Workspace-Id")) {
+    headers.set("X-Workspace-Id", wsId);
+  }
+  if (!headers.has("Content-Type") && !(options.body instanceof FormData)) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  const url = endpoint.startsWith("http") ? endpoint : `${API_BASE_URL}${endpoint}`;
+  const res = await fetch(url, { ...options, headers });
+
+  if (!res.ok) {
+    let errorDetail = `HTTP ${res.status}: ${res.statusText}`;
+    try {
+      const errJson = await res.json();
+      errorDetail = errJson.detail || errorDetail;
+    } catch {
+      // Body not JSON
+    }
+    throw new Error(errorDetail);
+  }
+
+  return (await res.json()) as T;
+}
+
 export const api = {
+  // AUTHENTICATION
+  async login(email: string, password: string): Promise<{ access_token: string; user: any }> {
+    const data = await request<{ access_token: string; token_type: string; user: any }>(
+      "/auth/login",
+      {
+        method: "POST",
+        body: JSON.stringify({ email, password }),
+      }
+    );
+    authStorage.setToken(data.access_token);
+    authStorage.setUser(data.user);
+    return data;
+  },
+
+  async register(
+    email: string,
+    password: string,
+    full_name: string
+  ): Promise<{ access_token: string; user: any }> {
+    const data = await request<{ access_token: string; token_type: string; user: any }>(
+      "/auth/register",
+      {
+        method: "POST",
+        body: JSON.stringify({ email, password, full_name }),
+      }
+    );
+    authStorage.setToken(data.access_token);
+    authStorage.setUser(data.user);
+    return data;
+  },
+
+  async getMe(): Promise<any> {
+    try {
+      return await request<any>("/auth/me");
+    } catch {
+      return authStorage.getUser() || { email: "aarav@aaravretail.in", full_name: "Aarav Sharma" };
+    }
+  },
+
+  logout() {
+    authStorage.clearToken();
+  },
+
   // WORKSPACES
   async getWorkspaces(): Promise<Workspace[]> {
     try {
-      const res = await fetch(`${API_BASE_URL}/workspaces`);
-      if (res.ok) return await res.json();
+      const list = await request<any[]>("/workspaces");
+      if (Array.isArray(list) && list.length > 0) {
+        return list.map((w) => ({
+          id: w.id,
+          name: w.name,
+          mode: w.mode,
+          currency: w.currency,
+          currencySymbol: w.currency === "INR" ? "₹" : w.currency === "USD" ? "$" : "€",
+          starting_cash: w.starting_cash,
+          created_at: w.created_at,
+          updated_at: w.updated_at,
+          isDemo: w.name.includes("Retail") || w.id.startsWith("ws-demo"),
+        }));
+      }
     } catch {
-      // Backend not running, use demo
+      // Fallback
     }
     return getStoredItem("workspaces", DEMO_WORKSPACES);
   },
@@ -67,12 +193,21 @@ export const api = {
     starting_cash: number;
   }): Promise<Workspace> {
     try {
-      const res = await fetch(`${API_BASE_URL}/workspaces`, {
+      const res = await request<any>("/workspaces", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
-      if (res.ok) return await res.json();
+      return {
+        id: res.id,
+        name: res.name,
+        mode: res.mode,
+        currency: res.currency,
+        currencySymbol: res.currency === "INR" ? "₹" : res.currency === "USD" ? "$" : "€",
+        starting_cash: res.starting_cash,
+        created_at: res.created_at,
+        updated_at: res.updated_at,
+        isDemo: false,
+      };
     } catch {
       // Fallback
     }
@@ -98,8 +233,40 @@ export const api = {
   // DIGITAL TWIN
   async getDigitalTwin(workspaceId: string): Promise<DigitalTwin> {
     try {
-      const res = await fetch(`${API_BASE_URL}/workspaces/${workspaceId}/digital-twin`);
-      if (res.ok) return await res.json();
+      const res = await request<any>("/digital-twin", {}, workspaceId);
+      if (res && res.workspace_id) {
+        return {
+          workspace_id: res.workspace_id,
+          as_of_date: res.as_of_date,
+          total_available_cash: res.total_available_cash,
+          accounts_breakdown: res.accounts_breakdown || [],
+          liquidity_runway_days: res.liquidity_runway_days,
+          monthly_burn_rate: res.monthly_burn_rate,
+          monthly_run_rate: res.monthly_run_rate,
+          net_monthly_cash_flow: res.net_monthly_cash_flow,
+          operating_buffer_months: res.operating_buffer_months,
+          receivables: {
+            total_pending: res.receivables?.total_pending || 0,
+            total_overdue: res.receivables?.total_overdue || 0,
+            expected_next_30_days: res.receivables?.expected_next_30_days || 0,
+            count_pending: res.receivables?.count || res.receivables?.count_pending || 0,
+          },
+          payables: {
+            total_pending: res.payables?.total_pending || 0,
+            total_overdue: res.payables?.total_overdue || 0,
+            expected_next_30_days: res.payables?.expected_next_30_days || 0,
+            count_pending: res.payables?.count || res.payables?.count_pending || 0,
+          },
+          financial_health_score: res.financial_health_score,
+          financial_vitality: res.financial_vitality as any,
+          health_breakdown: res.health_breakdown || {
+            runway_score: 85,
+            cash_buffer_score: 80,
+            receivable_collection_score: 75,
+            operating_margin_score: 88,
+          },
+        };
+      }
     } catch {
       // Fallback
     }
@@ -109,8 +276,22 @@ export const api = {
   // ACCOUNTS
   async getAccounts(workspaceId: string): Promise<Account[]> {
     try {
-      const res = await fetch(`${API_BASE_URL}/workspaces/${workspaceId}/accounts`);
-      if (res.ok) return await res.json();
+      const list = await request<any[]>("/accounts", {}, workspaceId);
+      if (Array.isArray(list) && list.length > 0) {
+        return list.map((a) => ({
+          id: a.id,
+          workspace_id: a.workspace_id,
+          name: a.name,
+          type: a.type,
+          institution: a.institution,
+          account_number_mask: a.account_number_mask || "••••",
+          balance: a.balance,
+          currency: a.currency || "INR",
+          is_active: a.is_active,
+          last_synced_at: a.last_synced_at || a.created_at || new Date().toISOString(),
+          status: "synced",
+        }));
+      }
     } catch {
       // Fallback
     }
@@ -120,22 +301,45 @@ export const api = {
   // TRANSACTIONS
   async getTransactions(workspaceId: string): Promise<Transaction[]> {
     try {
-      const res = await fetch(`${API_BASE_URL}/workspaces/${workspaceId}/transactions`);
-      if (res.ok) return await res.json();
+      const list = await request<any[]>("/transactions", {}, workspaceId);
+      if (Array.isArray(list)) {
+        return list.map((t) => ({
+          id: t.id,
+          workspace_id: t.workspace_id,
+          account_id: t.account_id || "acc-1",
+          account_name: t.account_name || "Primary Account",
+          date: t.date,
+          amount: t.amount,
+          type: t.type,
+          category: t.category,
+          description: t.description,
+          counterparty: t.counterparty || "Counterparty",
+          status: t.status,
+          is_recurring: Boolean(t.is_recurring),
+          reference_no: t.reference_no,
+          notes: t.notes,
+        }));
+      }
     } catch {
       // Fallback
     }
     return getStoredItem(`transactions_${workspaceId}`, DEMO_TRANSACTIONS);
   },
 
-  async addTransaction(workspaceId: string, tx: Omit<Transaction, "id" | "workspace_id">): Promise<Transaction> {
+  async addTransaction(
+    workspaceId: string,
+    tx: Omit<Transaction, "id" | "workspace_id">
+  ): Promise<Transaction> {
     try {
-      const res = await fetch(`${API_BASE_URL}/workspaces/${workspaceId}/transactions`, {
+      const res = await request<any>("/transactions", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(tx),
-      });
-      if (res.ok) return await res.json();
+      }, workspaceId);
+      return {
+        ...tx,
+        id: res.id,
+        workspace_id: workspaceId,
+      };
     } catch {
       // Fallback
     }
@@ -151,21 +355,28 @@ export const api = {
     return newTx;
   },
 
-  // INVOICES & RECEIVABLES/PAYABLES
+  // INVOICES & RECURRING
   async getInvoices(workspaceId: string): Promise<Invoice[]> {
-    try {
-      const res = await fetch(`${API_BASE_URL}/workspaces/${workspaceId}/invoices`);
-      if (res.ok) return await res.json();
-    } catch {
-      // Fallback
-    }
     return getStoredItem(`invoices_${workspaceId}`, DEMO_INVOICES);
   },
 
   async getRecurring(workspaceId: string): Promise<RecurringItem[]> {
     try {
-      const res = await fetch(`${API_BASE_URL}/workspaces/${workspaceId}/recurring`);
-      if (res.ok) return await res.json();
+      const list = await request<any[]>("/recurring", {}, workspaceId);
+      if (Array.isArray(list) && list.length > 0) {
+        return list.map((r) => ({
+          id: r.id,
+          workspace_id: r.workspace_id,
+          name: r.name,
+          type: r.type,
+          category: r.category,
+          amount: r.amount,
+          frequency: r.frequency,
+          next_due_date: r.next_due_date,
+          counterparty: r.counterparty,
+          is_active: r.is_active,
+        }));
+      }
     } catch {
       // Fallback
     }
@@ -175,18 +386,49 @@ export const api = {
   // FORECASTING
   async getForecast(workspaceId: string, days: 7 | 30 = 30): Promise<CashForecast> {
     try {
-      const res = await fetch(`${API_BASE_URL}/workspaces/${workspaceId}/forecast?days=${days}`);
-      if (res.ok) return await res.json();
+      const res = await request<any>(`/forecasts?horizon_days=${days}`, {}, workspaceId);
+      if (res && res.daily_forecasts) {
+        return {
+          workspace_id: res.workspace_id,
+          days,
+          generated_at: res.generated_at,
+          starting_balance: res.starting_balance,
+          ending_projected_balance: res.ending_balance ?? res.ending_projected_balance,
+          total_inflows: res.total_inflows || 0,
+          total_outflows: res.total_outflows || 0,
+          net_projected_change: res.net_change ?? res.net_projected_change,
+          lowest_projected_balance: res.lowest_balance ?? res.lowest_projected_balance,
+          lowest_balance_date: String(res.lowest_balance_date),
+          safety_buffer_threshold: res.safety_buffer ?? 40000,
+          shortage_detected: Boolean(res.shortage_detected),
+          assumptions: res.assumptions || [],
+          uncertainty_range_percentage: res.uncertainty_range_percentage || 4.2,
+          daily_forecasts: (res.daily_forecasts || []).map((d: any) => ({
+            date: d.date,
+            day_label: d.day_label,
+            opening_balance: d.opening_balance,
+            expected_inflows: d.expected_inflows,
+            expected_outflows: d.expected_outflows,
+            net_change: d.net_change,
+            closing_balance: d.closing_balance,
+            confidence_low: d.confidence_low,
+            confidence_high: d.confidence_high,
+            scheduled_events: d.scheduled_events,
+          })),
+        };
+      }
     } catch {
       // Fallback
     }
+
     const fullForecast = getStoredItem(`forecast_${workspaceId}`, DEMO_FORECAST_30D);
     if (days === 7) {
       return {
         ...fullForecast,
         days: 7,
         daily_forecasts: fullForecast.daily_forecasts.slice(0, 7),
-        ending_projected_balance: fullForecast.daily_forecasts[6]?.closing_balance || fullForecast.starting_balance,
+        ending_projected_balance:
+          fullForecast.daily_forecasts[6]?.closing_balance || fullForecast.starting_balance,
       };
     }
     return fullForecast;
@@ -195,8 +437,32 @@ export const api = {
   // SCENARIO LAB (WHAT-IF SIMULATOR)
   async getScenarios(workspaceId: string): Promise<ScenarioSimulation[]> {
     try {
-      const res = await fetch(`${API_BASE_URL}/workspaces/${workspaceId}/scenarios`);
-      if (res.ok) return await res.json();
+      const list = await request<any[]>("/simulations", {}, workspaceId);
+      if (Array.isArray(list) && list.length > 0) {
+        return list.map((s) => ({
+          id: s.id,
+          workspace_id: s.workspace_id,
+          title: s.title,
+          description: s.description || `Simulated ${s.scenario_type} with deterministic cash delta.`,
+          scenario_type: s.scenario_type,
+          parameters: s.parameters || {},
+          created_at: s.created_at,
+          baseline_runway_days: s.baseline_runway_days,
+          simulated_runway_days: s.simulated_runway_days,
+          runway_delta_days: s.runway_delta_days,
+          baseline_ending_cash: s.baseline_ending_cash,
+          simulated_ending_cash: s.simulated_ending_cash,
+          net_impact: s.net_impact,
+          lowest_cash_dip: s.lowest_cash_dip,
+          lowest_cash_date: String(s.lowest_cash_date),
+          break_even_day: s.break_even_day,
+          verdict: s.verdict,
+          risk_level: s.risk_level,
+          confidence_score: s.confidence_score,
+          rule_based_advice: s.rule_based_advice || [],
+          trajectory_comparison: s.trajectory_data || [],
+        }));
+      }
     } catch {
       // Fallback
     }
@@ -213,22 +479,48 @@ export const api = {
     }
   ): Promise<ScenarioSimulation> {
     try {
-      const res = await fetch(`${API_BASE_URL}/workspaces/${workspaceId}/scenarios/simulate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(params),
-      });
-      if (res.ok) return await res.json();
+      const res = await request<any>(
+        "/simulations",
+        {
+          method: "POST",
+          body: JSON.stringify(params),
+        },
+        workspaceId
+      );
+
+      if (res && res.id) {
+        return {
+          id: res.id,
+          workspace_id: res.workspace_id,
+          title: res.title,
+          description: res.description || `Simulated ${res.scenario_type} with deterministic cash delta.`,
+          scenario_type: res.scenario_type,
+          parameters: res.parameters || {},
+          created_at: res.created_at,
+          baseline_runway_days: res.baseline_runway_days,
+          simulated_runway_days: res.simulated_runway_days,
+          runway_delta_days: res.runway_delta_days,
+          baseline_ending_cash: res.baseline_ending_cash,
+          simulated_ending_cash: res.simulated_ending_cash,
+          net_impact: res.net_impact,
+          lowest_cash_dip: res.lowest_cash_dip,
+          lowest_cash_date: String(res.lowest_cash_date),
+          break_even_day: res.break_even_day,
+          verdict: res.verdict,
+          risk_level: res.risk_level,
+          confidence_score: res.confidence_score,
+          rule_based_advice: res.rule_based_advice || [],
+          trajectory_comparison: res.trajectory_data || [],
+        };
+      }
     } catch {
-      // Fallback pure deterministic simulation
+      // Fallback
     }
 
     const outflow = Number(params.parameters.outflow_amount || 0);
     const upfrontPct = Number(params.parameters.upfront_percentage || 100);
     const upfront = (outflow * upfrontPct) / 100;
-    const deferred = outflow - upfront;
     const uplift = Number(params.parameters.expected_sales_uplift || 0);
-    const delayDays = Number(params.parameters.delay_days || 0);
 
     const baseForecast = DEMO_FORECAST_30D;
     const baselineDays = baseForecast.daily_forecasts;
@@ -248,17 +540,9 @@ export const api = {
           const incrementalDailyUplift = uplift / 35;
           simBal += (day - 7) * incrementalDailyUplift;
         }
-        if (day >= (params.parameters.deferred_days || 30)) {
-          simBal -= deferred;
+        if (day >= 30) {
+          simBal -= (outflow - upfront);
         }
-      } else if (params.scenario_type === "delayed_receivable") {
-        const amt = Number(params.parameters.affected_invoices_amount || 54000);
-        if (day >= 4 && day < 4 + delayDays) {
-          simBal -= amt;
-        }
-      } else if (params.scenario_type === "revenue_shock") {
-        const pct = (params.parameters.revenue_reduction_percent || 20) / 100;
-        simBal -= day * 1200 * pct;
       }
 
       if (simBal < lowestSimulated) {
@@ -280,10 +564,16 @@ export const api = {
       };
     });
 
-    const netImpact = trajectory[trajectory.length - 1].simulated_balance - trajectory[trajectory.length - 1].baseline_balance;
+    const netImpact =
+      trajectory[trajectory.length - 1].simulated_balance -
+      trajectory[trajectory.length - 1].baseline_balance;
     const safetyBuffer = 40000;
     const isBufferBreached = lowestSimulated < safetyBuffer;
-    const verdict = isBufferBreached ? (lowestSimulated < 20000 ? "HIGH_RISK" : "CAUTION") : "SAFE";
+    const verdict = isBufferBreached
+      ? lowestSimulated < 20000
+        ? "HIGH_RISK"
+        : "CAUTION"
+      : "SAFE";
 
     const newScn: ScenarioSimulation = {
       id: `scn-${Date.now()}`,
@@ -325,8 +615,24 @@ export const api = {
   // RISK INTELLIGENCE
   async getRiskAlerts(workspaceId: string): Promise<RiskAlert[]> {
     try {
-      const res = await fetch(`${API_BASE_URL}/workspaces/${workspaceId}/risks`);
-      if (res.ok) return await res.json();
+      const list = await request<any[]>("/risks", {}, workspaceId);
+      if (Array.isArray(list) && list.length > 0) {
+        return list.map((r) => ({
+          id: r.id,
+          workspace_id: r.workspace_id,
+          category: r.category,
+          severity: r.severity,
+          title: r.title,
+          description: r.description,
+          explanation: r.explanation,
+          financial_impact: r.financial_impact,
+          detected_at: r.detected_at,
+          is_resolved: r.is_resolved,
+          suggested_action: r.suggested_action,
+          related_entity: r.related_entity,
+          related_transactions: r.related_transactions || [],
+        }));
+      }
     } catch {
       // Fallback
     }
@@ -335,10 +641,24 @@ export const api = {
 
   async resolveRiskAlert(workspaceId: string, alertId: string): Promise<RiskAlert> {
     try {
-      const res = await fetch(`${API_BASE_URL}/workspaces/${workspaceId}/risks/${alertId}/resolve`, {
+      const res = await request<any>(`/risks/${alertId}/resolve`, {
         method: "POST",
-      });
-      if (res.ok) return await res.json();
+      }, workspaceId);
+      return {
+        id: res.id,
+        workspace_id: res.workspace_id,
+        category: res.category,
+        severity: res.severity,
+        title: res.title,
+        description: res.description,
+        explanation: res.explanation,
+        financial_impact: res.financial_impact,
+        detected_at: res.detected_at,
+        is_resolved: res.is_resolved,
+        suggested_action: res.suggested_action,
+        related_entity: res.related_entity,
+        related_transactions: res.related_transactions || [],
+      };
     } catch {
       // Fallback
     }
@@ -349,11 +669,45 @@ export const api = {
     return updated.find((r) => r.id === alertId)!;
   },
 
+  async analyzeRisks(workspaceId: string): Promise<{ analyzed_count: number; new_alerts_count: number }> {
+    try {
+      return await request<any>("/risks/analyze", {
+        method: "POST",
+        body: JSON.stringify({ reanalyze_duplicates: true }),
+      }, workspaceId);
+    } catch {
+      return { analyzed_count: 50, new_alerts_count: 0 };
+    }
+  },
+
   // DECISION MEMORY
   async getDecisionMemories(workspaceId: string): Promise<DecisionMemory[]> {
     try {
-      const res = await fetch(`${API_BASE_URL}/workspaces/${workspaceId}/decision-memories`);
-      if (res.ok) return await res.json();
+      const list = await request<any[]>("/decisions", {}, workspaceId);
+      if (Array.isArray(list) && list.length > 0) {
+        return list.map((d) => ({
+          id: d.id,
+          workspace_id: d.workspace_id,
+          scenario_id: d.scenario_id,
+          decision_title: d.title || d.decision_title,
+          category: d.category,
+          hypothesis: d.hypothesis,
+          assumptions: d.assumptions || [],
+          expected_outcomes: d.expected_outcomes || [],
+          actual_outcomes: (d.outcomes || []).map((o: any) => ({
+            metric: o.metric,
+            actual_value: o.actual_value,
+            variance_percentage: o.variance_percentage,
+            evaluated_at: o.evaluated_at,
+            verdict: o.verdict,
+          })),
+          status: d.status,
+          decision_date: String(d.decision_date),
+          evaluation_date: String(d.evaluation_date),
+          notes: d.notes,
+          created_at: d.created_at,
+        }));
+      }
     } catch {
       // Fallback
     }
@@ -365,12 +719,41 @@ export const api = {
     data: Omit<DecisionMemory, "id" | "workspace_id" | "created_at">
   ): Promise<DecisionMemory> {
     try {
-      const res = await fetch(`${API_BASE_URL}/workspaces/${workspaceId}/decision-memories`, {
+      const payload = {
+        title: data.decision_title,
+        category: data.category,
+        hypothesis: data.hypothesis,
+        assumptions: data.assumptions,
+        expected_outcomes: data.expected_outcomes.map((o) => ({
+          metric: o.metric,
+          expected_value: String(o.expected_value),
+          timeframe: o.timeframe,
+        })),
+        scenario_id: data.scenario_id,
+        notes: data.notes,
+      };
+
+      const res = await request<any>("/decisions", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      if (res.ok) return await res.json();
+        body: JSON.stringify(payload),
+      }, workspaceId);
+
+      return {
+        id: res.id,
+        workspace_id: workspaceId,
+        scenario_id: res.scenario_id,
+        decision_title: res.title,
+        category: res.category,
+        hypothesis: res.hypothesis,
+        assumptions: res.assumptions || [],
+        expected_outcomes: res.expected_outcomes || [],
+        actual_outcomes: [],
+        status: res.status,
+        decision_date: String(res.decision_date),
+        evaluation_date: String(res.evaluation_date),
+        notes: res.notes,
+        created_at: res.created_at,
+      };
     } catch {
       // Fallback
     }
@@ -387,6 +770,51 @@ export const api = {
     return newDec;
   },
 
+  async recordDecisionOutcome(
+    workspaceId: string,
+    decisionId: string,
+    outcome: {
+      metric: string;
+      actual_value: string;
+      variance_percentage?: number;
+      verdict: "exceeded" | "met" | "missed" | "pending";
+      notes?: string;
+    }
+  ): Promise<any> {
+    try {
+      return await request<any>(
+        `/decisions/${decisionId}/outcome`,
+        {
+          method: "POST",
+          body: JSON.stringify(outcome),
+        },
+        workspaceId
+      );
+    } catch {
+      // Local store fallback
+      const current = getStoredItem(`decisions_${workspaceId}`, DEMO_DECISION_MEMORIES);
+      const updated = current.map((d) => {
+        if (d.id === decisionId) {
+          const actuals = d.actual_outcomes || [];
+          return {
+            ...d,
+            status: "evaluated" as const,
+            actual_outcomes: [
+              ...actuals,
+              {
+                ...outcome,
+                evaluated_at: new Date().toISOString(),
+              },
+            ],
+          };
+        }
+        return d;
+      });
+      setStoredItem(`decisions_${workspaceId}`, updated);
+      return outcome;
+    }
+  },
+
   // AI FINANCIAL AGENT (TOOL-CALLING)
   async sendChatMessage(
     workspaceId: string,
@@ -394,17 +822,38 @@ export const api = {
     history: ChatMessage[]
   ): Promise<ChatMessage> {
     try {
-      const res = await fetch(`${API_BASE_URL}/workspaces/${workspaceId}/ai/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message, history }),
-      });
-      if (res.ok) return await res.json();
+      const res = await request<any>(
+        "/ai/chat",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            message,
+            history: history.slice(-6).map((h) => ({
+              role: h.role,
+              content: h.content,
+            })),
+          }),
+        },
+        workspaceId
+      );
+
+      if (res && res.content) {
+        return {
+          id: `msg-${Date.now()}`,
+          session_id: "active",
+          role: "assistant",
+          content: res.content,
+          timestamp: new Date().toISOString(),
+          tool_calls_executed: res.tool_calls_executed || [],
+          verified_figures: res.verified_figures || [],
+          suggested_followups: res.suggested_followups || [],
+        };
+      }
     } catch {
-      // Fallback deterministic AI agent simulator
+      // Fallback deterministic AI agent
     }
 
-    // Deterministic AI response logic using verified data
+    // Deterministic offline fallback
     const twin = DEMO_DIGITAL_TWIN;
     const lower = message.toLowerCase();
 
@@ -421,7 +870,7 @@ export const api = {
         { label: "Available Cash", value: `₹${twin.total_available_cash.toLocaleString()}`, source: "Digital Twin Engine" },
         { label: "Runway", value: `${twin.liquidity_runway_days} Days`, source: "Forecast Engine" }
       );
-    } else if (lower.includes("inventory") || lower.includes("50,000") || lower.includes("purchase") || lower.includes("afford")) {
+    } else if (lower.includes("inventory") || lower.includes("50,000") || lower.includes("50000") || lower.includes("purchase") || lower.includes("afford")) {
       toolName = "run_what_if_simulation";
       toolResult = "Simulated CapEx ₹50,000: 30% advance (₹15k) safe; 100% upfront breaches ₹40k buffer on Day 6.";
       content = `I executed a simulation on your cash flow for a **₹50,000 inventory purchase**:\n\n- **100% Upfront**: Cash dips to **₹25,000** on Nov 5, breaching your emergency buffer.\n- **Recommended Terms (30% Advance / 70% Net 30)**: Safe lowest balance of **₹53,200** on Nov 6. Expected sales uplift: **+₹1,15,000**.\n- Break-even is reached on **Day 22**.\n\nVerdict: **SAFE** with structured vendor payment terms.`;
@@ -470,7 +919,7 @@ export const api = {
     };
   },
 
-  // CSV UPLOAD & COLUMN MAPPING
+  // CSV UPLOAD & IMPORT
   async parseCSVPreview(file: File): Promise<CSVUploadResult> {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -492,7 +941,9 @@ export const api = {
           const amtIdx = headers.findIndex((h) => /amount|sum|rupee|value|debit|credit/i.test(h));
           const descIdx = headers.findIndex((h) => /desc|narrative|particulars|details|item/i.test(h));
           const catIdx = headers.findIndex((h) => /category|type|tag/i.test(h));
-          const partyIdx = headers.findIndex((h) => /vendor|party|payee|customer|merchant|counterparty/i.test(h));
+          const partyIdx = headers.findIndex((h) =>
+            /vendor|party|payee|customer|merchant|counterparty/i.test(h)
+          );
 
           const previewTx: Partial<Transaction>[] = sampleRows.map((cols, idx) => {
             const rawAmt = amtIdx >= 0 ? parseFloat(cols[amtIdx].replace(/[^\d.-]/g, "")) || 0 : 1000;
@@ -502,7 +953,7 @@ export const api = {
               amount: Math.abs(rawAmt),
               type: rawAmt >= 0 ? "income" : "expense",
               description: descIdx >= 0 ? cols[descIdx] : "Bank Transaction",
-              category: catIdx >= 0 ? cols[catIdx] : "Uncategorized",
+              category: catIdx >= 0 ? cols[catIdx] : "General",
               counterparty: partyIdx >= 0 ? cols[partyIdx] : "Direct Payment",
               status: "cleared",
             };
@@ -515,7 +966,7 @@ export const api = {
             invalid_rows: 0,
             detected_categories: [
               { category: "Store Sales", count: Math.ceil((lines.length - 1) * 0.4) },
-              { category: "Inventory", count: Math.ceil((lines.length - 1) * 0.3) },
+              { category: "Raw Material", count: Math.ceil((lines.length - 1) * 0.3) },
               { category: "Logistics", count: Math.ceil((lines.length - 1) * 0.2) },
               { category: "Utilities", count: Math.ceil((lines.length - 1) * 0.1) },
             ],
@@ -533,8 +984,30 @@ export const api = {
   async confirmCSVUpload(
     workspaceId: string,
     result: CSVUploadResult,
-    _mapping: ColumnMapping
+    _mapping: ColumnMapping,
+    actualFile?: File
   ): Promise<{ imported_count: number }> {
+    // Attempt backend multipart upload first
+    if (actualFile) {
+      try {
+        const formData = new FormData();
+        formData.append("file", actualFile);
+
+        const summary = await request<any>(
+          "/transactions/import",
+          {
+            method: "POST",
+            body: formData,
+          },
+          workspaceId
+        );
+        return { imported_count: summary.imported_count || result.preview_transactions.length };
+      } catch (err) {
+        console.warn("Backend CSV import fallback to local ledger:", err);
+      }
+    }
+
+    // Local fallback store
     const current = getStoredItem(`transactions_${workspaceId}`, DEMO_TRANSACTIONS);
     const newItems: Transaction[] = result.preview_transactions.map((p, i) => ({
       id: `imported-${Date.now()}-${i}`,

@@ -1,6 +1,6 @@
-from typing import List, Optional
+from typing import List, Optional, Union
 from datetime import date
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class ForecastGenerateRequest(BaseModel):
@@ -22,6 +22,8 @@ class DailyForecastItem(BaseModel):
 
 
 class ForecastResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     workspace_id: str
     generated_at: str
@@ -30,7 +32,7 @@ class ForecastResponse(BaseModel):
     ending_balance: float
     net_change: float
     lowest_balance: float
-    lowest_balance_date: str
+    lowest_balance_date: Union[date, str]
     safety_buffer: float
     shortage_detected: bool
     assumptions: List[str]

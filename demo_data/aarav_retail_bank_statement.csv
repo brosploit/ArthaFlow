@@ -1,0 +1,29 @@
+Date,Description,Amount,Type,Category,Counterparty,ReferenceNo
+2026-10-25,Walk-in Weekend Retail Sales Batch 1,28450.00,income,Store Sales,Walk-in Retail Customers,POS-2026-1025-01
+2026-10-26,HDFC Merchant QR Settlement,14820.00,income,Digital Payments,PayTM/UPI Aggregator,QR-SETTLE-8812
+2026-10-27,Surat Cotton Mills - Fabric Lot Batch A,18500.00,expense,Raw Material,Surat Cotton Mills,INV-SCM-4412
+2026-10-27,Surat Cotton Mills - Duplicate Reference Flag,18500.00,expense,Raw Material,Surat Cotton Mills,INV-SCM-4412-B
+2026-10-28,Airtel Commercial Fiber Internet,1899.00,expense,Utilities,Bharti Airtel Ltd,BILL-OCT-99124
+2026-10-29,Jaipur Block Prints Wholesale Inflow,38500.00,income,Wholesale,Jaipur Handloom Mart,NEFT-JHM-1029
+2026-10-30,Torrent Power Showroom Electricity Bill,4650.00,expense,Utilities,Torrent Power Ltd,ELEC-2026-9041
+2026-10-31,Shopify POS & Tally Cloud SaaS,3900.00,expense,Software & SaaS,Shopify India / Tally,SAAS-SUB-1031
+2026-11-01,FabIndia Franchise Order Settlement,45000.00,income,Wholesale,FabIndia Franchise Outlet,NEFT-HDFC-99120
+2026-11-02,Delhivery Express Surface Logistics,12400.00,expense,Logistics,Delhivery Logistics Pvt Ltd,INV-DLV-8941
+2026-11-03,Kala Kendra Boutique Advance Payment,15000.00,income,Store Sales,Kala Kendra Fashion,UPI-KK-7721
+2026-11-04,Packaging Materials Box Lot 500 units,6800.00,expense,Packaging,Navkar Packaging Hub,INV-NP-2204
+2026-11-05,Commercial Showroom Lease Rent,22000.00,expense,Rent & Facilities,Sharma Real Estate Trust,CHQ-881240
+2026-11-06,Staff Monthly Payroll Direct Transfer,45000.00,expense,Payroll,Staff Salary Batch,NEFT-SAL-1106
+2026-11-07,Boutique Seasonal Lighting & Display,8500.00,expense,Store Operations,Om Electricals,INV-OME-551
+2026-11-08,Walk-in Diwalifest Retail Clearance,39400.00,income,Store Sales,Walk-in Retail Customers,POS-2026-1108-01
+2026-11-09,BlueDart Express Air Courier - South Zone,5200.00,expense,Logistics,BlueDart Express Ltd,INV-BDE-1049
+2026-11-10,Corporate Gifting Order Advance (50 Kurtas),52000.00,income,Corporate Sales,Infosys Employee Welfare Club,NEFT-INFY-4401
+2026-11-11,Ananya Silk House Raw Yarn Procurement,24500.00,expense,Raw Material,Ananya Silk Mills,INV-ASM-901
+2026-11-12,Tea, Coffee & Staff Refreshment Pantry,2400.00,expense,Office Expenses,Local Pantry Mart,CASH-PANTRY-1112
+2026-11-13,Weekend Festive Footfall Sales,31200.00,income,Store Sales,Walk-in Retail Customers,POS-2026-1113-02
+2026-11-14,Tailoring Master Piece-Rate Contractor,16000.00,expense,Payroll,Zameer Tailoring Works,UPI-ZTW-884
+2026-11-15,Municipal Trade License Renewal Fee,3500.00,expense,Legal & Compliance,Ahmedabad Municipal Corp,GOV-LIC-2026
+2026-11-16,Institutional Uniform Supply Tranche 1,48000.00,income,Corporate Sales,St. Xavier High School,NEFT-STX-9940
+2026-11-17,Unusual Capital Outflow: Showroom Air Conditioner Repair & Overhaul,14500.00,expense,Repairs & Maintenance,CoolAir Systems,INV-CAS-8810
+2026-11-18,Razorpay Online Web Store Sales Settlement,26400.00,income,Digital Payments,Razorpay Gateway Settlements,RZP-BATCH-1118
+2026-11-19,Surat Cotton Mills - Festive Chanderi Silk Lot (Large CapEx),48000.00,expense,Raw Material,Surat Cotton Mills,INV-SCM-4590
+2026-11-20,Retail Boutique In-Store Card Collections,22900.00,income,Store Sales,HDFC POS Terminal Batch,POS-2026-1120-03

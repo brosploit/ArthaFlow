@@ -1,0 +1,41 @@
+services:
+  # =================================================================
+  # ArthaFlow AI — Production Backend Web Service (Render)
+  # =================================================================
+  - type: web
+    name: arthaflow-backend
+    runtime: python
+    region: oregon
+    plan: free
+    branch: main
+    buildCommand: "cd backend && pip install -r requirements.txt && alembic upgrade head"
+    startCommand: "cd backend && gunicorn -k uvicorn.workers.UvicornWorker app.main:app -b 0.0.0.0:$PORT -w 2"
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.0
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: arthaflow-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "1440"
+      - key: CORS_ORIGINS
+        value: "https://arthaflow.vercel.app,https://arthaflow-ai.vercel.app"
+      - key: GEMINI_API_KEY
+        sync: false
+
+databases:
+  # =================================================================
+  # ArthaFlow AI — Managed PostgreSQL Database (Render)
+  # =================================================================
+  - name: arthaflow-db
+    region: oregon
+    plan: free
+    databaseName: arthaflow
+    user: arthaflow_user

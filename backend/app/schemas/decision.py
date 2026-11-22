@@ -1,6 +1,6 @@
 from typing import List, Optional, Dict, Any
 from datetime import date, datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class ExpectedOutcomeItem(BaseModel):
@@ -30,6 +30,8 @@ class DecisionOutcomeCreate(BaseModel):
 
 
 class DecisionOutcomeResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     decision_id: str
     metric: str
@@ -40,11 +42,10 @@ class DecisionOutcomeResponse(BaseModel):
     evaluated_at: datetime
     notes: Optional[str]
 
-    class Config:
-        from_attributes = True
-
 
 class DecisionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     workspace_id: str
     scenario_id: Optional[str]
@@ -59,6 +60,3 @@ class DecisionResponse(BaseModel):
     notes: Optional[str]
     outcomes: List[DecisionOutcomeResponse] = []
     created_at: datetime
-
-    class Config:
-        from_attributes = True

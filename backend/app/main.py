@@ -2,7 +2,9 @@ import os
 import time
 from datetime import date, timedelta
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -59,8 +61,33 @@ def root():
 
 
 @app.get("/health")
+@app.get(f"{settings.API_V1_STR}/health")
 def health_check():
-    return {"status": "healthy", "database": "connected"}
+    """Production health-check endpoint probing API and database connectivity."""
+    db_status = "connected"
+    db_error = None
+    try:
+        db = SessionLocal()
+        db.execute(text("SELECT 1"))
+        db.close()
+    except Exception as e:
+        db_status = "disconnected"
+        db_error = str(e)
+
+    is_healthy = db_status == "connected"
+    status_code = 200 if is_healthy else 503
+    payload = {
+        "status": "healthy" if is_healthy else "unhealthy",
+        "platform": settings.PROJECT_NAME,
+        "version": settings.VERSION,
+        "environment": settings.ENVIRONMENT,
+        "database": db_status,
+        "gemini_configured": bool(settings.GEMINI_API_KEY),
+    }
+    if db_error:
+        payload["database_error"] = db_error
+
+    return JSONResponse(status_code=status_code, content=payload)
 
 
 def seed_demo_data(db: Session):

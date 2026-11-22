@@ -1,9 +1,11 @@
 from typing import List, Optional, Any, Dict
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class RiskAlertResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     workspace_id: str
     category: str
@@ -17,9 +19,6 @@ class RiskAlertResponse(BaseModel):
     related_entity: Optional[str] = None
     related_transactions: Optional[List[Dict[str, Any]]] = None
     detected_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class RiskAnalyzeRequest(BaseModel):

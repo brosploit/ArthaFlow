@@ -110,11 +110,16 @@ export const TransactionsPage: React.FC<TransactionsPageProps> = () => {
     if (!csvPreview) return;
     setIsImporting(true);
     try {
-      const res = await api.confirmCSVUpload(activeWorkspace.id, csvPreview, {
-        date: "Date",
-        amount: "Amount",
-        description: "Description",
-      });
+      const res = await api.confirmCSVUpload(
+        activeWorkspace.id,
+        csvPreview,
+        {
+          date: "Date",
+          amount: "Amount",
+          description: "Description",
+        },
+        selectedFile || undefined
+      );
       setUploadSuccessMsg(`Successfully imported ${res.imported_count} transactions!`);
       setTimeout(() => {
         setIsUploadModalOpen(false);

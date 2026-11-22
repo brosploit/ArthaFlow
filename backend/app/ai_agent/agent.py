@@ -28,6 +28,29 @@ def process_ai_chat_request(
     verified_figures: List[AIVerifiedFigure] = []
     suggested_followups: List[str] = []
 
+    # Prompt injection and adversarial guard
+    adversarial_patterns = [
+        "ignore previous", "ignore all rules", "system prompt", "reveal instructions",
+        "you are now in developer mode", "jailbreak", "dan mode", "disregard guidelines"
+    ]
+    if any(pat in q_lower for pat in adversarial_patterns):
+        return AIChatResponse(
+            content=(
+                "Security Guard Activated: ArthaFlow AI operates exclusively under deterministic financial "
+                "decision governance. All answers are grounded in verified ledger data and deterministic backend tools. "
+                "I cannot override security boundaries or fabricate financial metrics."
+            ),
+            tool_calls_executed=[],
+            verified_figures=[
+                AIVerifiedFigure(label="Integrity Guard", value="Active", source="ArthaFlow Decision Engine")
+            ],
+            suggested_followups=[
+                "What is my current available cash and runway?",
+                "Can I afford to purchase ₹50,000 inventory?",
+                "Show active cash flow risk alerts",
+            ],
+        )
+
     # Intent routing to verified deterministic tools
     if any(k in q_lower for k in ["inventory", "50,000", "50000", "purchase", "afford", "capex", "buy"]):
         # Execute What-If simulation tool
